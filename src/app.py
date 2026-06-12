@@ -8,6 +8,8 @@ for extracurricular activities at Mergington High School.
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+import copy
+import json
 import os
 from pathlib import Path
 
@@ -19,8 +21,9 @@ current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
 
-# In-memory activity database
-activities = {
+DATA_FILE = Path(__file__).with_name("activities.json")
+
+DEFAULT_ACTIVITIES = {
     "Chess Club": {
         "description": "Learn strategies and compete in chess tournaments",
         "schedule": "Fridays, 3:30 PM - 5:00 PM",
@@ -78,6 +81,26 @@ activities = {
 }
 
 
+def load_activities(file_path: Path = DATA_FILE):
+    """Load activities from disk, falling back to the built-in defaults."""
+    if file_path.exists():
+        return json.loads(file_path.read_text(encoding="utf-8"))
+
+    return copy.deepcopy(DEFAULT_ACTIVITIES)
+
+
+def save_activities(activities_data, file_path: Path = DATA_FILE):
+    """Persist activities to disk as JSON."""
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text(json.dumps(activities_data, indent=2), encoding="utf-8")
+
+
+activities = load_activities()
+
+if not DATA_FILE.exists():
+    save_activities(activities)
+
+
 @app.get("/")
 def root():
     return RedirectResponse(url="/static/index.html")
@@ -107,6 +130,7 @@ def signup_for_activity(activity_name: str, email: str):
 
     # Add student
     activity["participants"].append(email)
+    save_activities(activities)
     return {"message": f"Signed up {email} for {activity_name}"}
 
 
@@ -129,4 +153,5 @@ def unregister_from_activity(activity_name: str, email: str):
 
     # Remove student
     activity["participants"].remove(email)
+    save_activities(activities)
     return {"message": f"Unregistered {email} from {activity_name}"}
